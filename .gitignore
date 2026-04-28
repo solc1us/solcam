@@ -1,5 +1,19 @@
-/results
-*.log
-*.tmp
-solcam_result.*
-/venv
+# --- Python / Backend ---
+__pycache__/
+*.py[cod]
+*$py.class
+venv/
+.env
+db.sqlite3
+
+# --- Node / Frontend ---
+node_modules/
+.next/
+out/
+build/
+.DS_Store
+*.local
+
+# --- Project Specific ---
+solcam_result.jpg
+uploads/
