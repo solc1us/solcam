@@ -1,0 +1,5 @@
+/results
+*.log
+*.tmp
+solcam_result.*
+/venv
