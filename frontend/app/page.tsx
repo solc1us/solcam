@@ -1,21 +1,22 @@
 "use client";
 
 import { useRef, useState, useEffect, useCallback } from "react";
-import Image from "next/image"; // Pake ini buat gantiin <img>
-import { Camera, Download, RefreshCcw, Send } from "lucide-react"; // Trash2 di-purge
+import Image from "next/image";
+import { Camera, Download, RefreshCcw, Send, X } from "lucide-react";
 
 export default function SolCam() {
 	const videoRef = useRef<HTMLVideoElement>(null);
 	const streamRef = useRef<MediaStream | null>(null);
-	const [photos, setPhotos] = useState<Blob[]>([]);
+	// Slot-based state: [photo1, photo2, photo3]
+	const [photos, setPhotos] = useState<(Blob | null)[]>([null, null, null]);
 	const [resultUrl, setResultUrl] = useState<string | null>(null);
 	const [isProcessing, setIsProcessing] = useState(false);
 	const [isFlashing, setIsFlashing] = useState(false);
 
 	const startCamera = useCallback(async () => {
 		try {
-			if (streamRef.current) {
-				if (videoRef.current) videoRef.current.srcObject = streamRef.current;
+			if (streamRef.current && videoRef.current) {
+				videoRef.current.srcObject = streamRef.current;
 				return;
 			}
 			const stream = await navigator.mediaDevices.getUserMedia({
@@ -24,7 +25,7 @@ export default function SolCam() {
 			streamRef.current = stream;
 			if (videoRef.current) videoRef.current.srcObject = stream;
 		} catch (err) {
-			console.error("Hardware access error:", err);
+			console.error("Camera access failed:", err);
 		}
 	}, []);
 
@@ -33,7 +34,10 @@ export default function SolCam() {
 	}, [resultUrl, startCamera]);
 
 	const capturePhoto = () => {
-		if (photos.length >= 3) return;
+		// Cari slot pertama yang masih null
+		const emptyIndex = photos.findIndex((p) => p === null);
+		if (emptyIndex === -1) return;
+
 		setIsFlashing(true);
 		setTimeout(() => setIsFlashing(false), 150);
 
@@ -48,7 +52,11 @@ export default function SolCam() {
 			ctx.drawImage(videoRef.current, 0, 0);
 			canvas.toBlob(
 				(blob) => {
-					if (blob) setPhotos((prev) => [...prev, blob]);
+					if (blob) {
+						const newPhotos = [...photos];
+						newPhotos[emptyIndex] = blob;
+						setPhotos(newPhotos);
+					}
 				},
 				"image/jpeg",
 				0.9,
@@ -56,20 +64,27 @@ export default function SolCam() {
 		}
 	};
 
+	const removePhoto = (index: number) => {
+		const newPhotos = [...photos];
+		newPhotos[index] = null;
+		setPhotos(newPhotos);
+	};
+
 	const processStrip = async () => {
-		if (photos.length !== 3) return;
+		if (photos.some((p) => p === null)) return;
 		setIsProcessing(true);
 		const formData = new FormData();
-		photos.forEach((blob, i) =>
-			formData.append("files", blob, `snap_${i}.jpg`),
-		);
+		// Kirim foto sesuai urutan slot
+		photos.forEach((blob, i) => {
+			if (blob) formData.append("files", blob, `snap_${i}.jpg`);
+		});
 
 		try {
 			const response = await fetch("http://localhost:8000/process-strip", {
 				method: "POST",
 				body: formData,
 			});
-			if (!response.ok) throw new Error("Backend failure.");
+			if (!response.ok) throw new Error("Backend failed.");
 			const imageBlob = await response.blob();
 			setResultUrl(URL.createObjectURL(imageBlob));
 		} catch (err) {
@@ -82,7 +97,7 @@ export default function SolCam() {
 	const reset = () => {
 		if (resultUrl) URL.revokeObjectURL(resultUrl);
 		setResultUrl(null);
-		setPhotos([]);
+		setPhotos([null, null, null]);
 	};
 
 	const getDownloadName = () => {
@@ -94,73 +109,116 @@ export default function SolCam() {
 	};
 
 	return (
-		<main className="min-h-screen bg-zinc-950 text-zinc-100 flex flex-col items-center justify-center p-6">
-			<div className="max-w-4xl w-full space-y-8 text-center">
-				<h1 className="text-4xl font-black tracking-tighter italic text-pink-500">
+		<main className="min-h-screen bg-black text-white flex items-center justify-center p-4">
+			<div className="w-full max-w-6xl flex flex-col gap-6">
+				<h1 className="text-3xl font-black italic text-pink-500 text-center">
 					solCam.
 				</h1>
 
 				{!resultUrl ? (
-					<div className="space-y-6">
-						<div className="relative aspect-video bg-zinc-900 rounded-2xl overflow-hidden border-2 border-zinc-800 shadow-2xl">
-							<video
-								ref={videoRef}
-								autoPlay
-								playsInline
-								className="w-full h-full object-cover scale-x-[-1]"
-							/>
-							{isFlashing && (
-								<div className="absolute inset-0 bg-white animate-in fade-out duration-150 z-10" />
-							)}
-							<div className="absolute top-4 right-4 bg-black/50 backdrop-blur-md px-4 py-2 rounded-full text-sm font-mono z-20">
-								SHOTS: {photos.length} / 3
-							</div>
-						</div>
-						<div className="flex gap-4 justify-center">
-							<button
-								onClick={capturePhoto}
-								disabled={photos.length >= 3}
-								className="flex items-center gap-2 bg-white text-black px-8 py-4 rounded-full font-bold hover:bg-pink-500 hover:text-white transition-all disabled:opacity-50"
-							>
-								<Camera size={20} /> SNAP
-							</button>
-							{photos.length === 3 && (
-								<button
-									onClick={processStrip}
-									disabled={isProcessing}
-									className="flex items-center gap-2 bg-pink-600 px-8 py-4 rounded-full font-bold hover:shadow-[0_0_20px_rgba(219,39,119,0.5)] transition-all"
+					<div className="grid grid-cols-1 md:grid-cols-[200px_1fr] gap-6 items-start">
+						{/* 1. Preview Strip (Left Sidebar) */}
+						<div className="flex flex-col gap-3 bg-zinc-900/50 p-3 rounded-2xl border border-zinc-800">
+							{photos.map((blob, i) => (
+								<div
+									key={i}
+									className="relative aspect-[4/3] bg-zinc-800 rounded-lg overflow-hidden border border-zinc-700"
 								>
-									<Send size={20} />{" "}
-									{isProcessing ? "PROCESSING..." : "GET STRIP"}
-								</button>
-							)}
+									{blob ? (
+										<>
+											<Image
+												src={URL.createObjectURL(blob)}
+												alt={`Shot ${i + 1}`}
+												fill
+												unoptimized
+												className="object-cover"
+											/>
+											<button
+												onClick={() => removePhoto(i)}
+												className="absolute top-1 right-1 p-1 bg-red-600 rounded-full hover:bg-red-500 transition-colors z-10"
+											>
+												<X size={14} />
+											</button>
+										</>
+									) : (
+										<div className="flex items-center justify-center h-full text-zinc-600 text-xs font-mono">
+											SLOT {i + 1}
+										</div>
+									)}
+								</div>
+							))}
+							<button
+								onClick={processStrip}
+								disabled={photos.some((p) => p === null) || isProcessing}
+								className="w-full py-3 bg-pink-600 rounded-xl font-bold text-sm disabled:opacity-30 hover:bg-pink-500 transition-all flex items-center justify-center gap-2"
+							>
+								<Send size={16} /> {isProcessing ? "Wait..." : "PROCESS"}
+							</button>
+						</div>
+
+						{/* 2. Live Cam (Main Area) */}
+						<div className="space-y-4">
+							<div className="relative aspect-video bg-zinc-900 rounded-3xl overflow-hidden border-2 border-zinc-800">
+								<video
+									ref={videoRef}
+									autoPlay
+									playsInline
+									className="w-full h-full object-cover scale-x-[-1]"
+								/>
+
+								{/* Visual Crop Guides (The 160px Clue) */}
+								<div className="absolute inset-y-0 left-0 w-[12.5%] bg-black/60 backdrop-blur-[2px] z-20 flex items-center justify-center">
+									<span className="[writing-mode:vertical-lr] rotate-180 text-[10px] text-zinc-500 font-bold tracking-widest uppercase">
+										Cropped
+									</span>
+								</div>
+								<div className="absolute inset-y-0 right-0 w-[12.5%] bg-black/60 backdrop-blur-[2px] z-20 flex items-center justify-center">
+									<span className="[writing-mode:vertical-lr] text-[10px] text-zinc-500 font-bold tracking-widest uppercase">
+										Cropped
+									</span>
+								</div>
+
+								{isFlashing && (
+									<div className="absolute inset-0 bg-white animate-in fade-out duration-150 z-30" />
+								)}
+
+								<div className="absolute bottom-6 left-1/2 -translate-x-1/2 z-40">
+									<button
+										onClick={capturePhoto}
+										disabled={!photos.some((p) => p === null)}
+										className="p-6 bg-white text-black rounded-full shadow-2xl hover:scale-110 active:scale-95 transition-all disabled:opacity-0 disabled:pointer-events-none"
+									>
+										<Camera size={32} />
+									</button>
+								</div>
+							</div>
 						</div>
 					</div>
 				) : (
-					<div className="flex flex-col items-center gap-8 animate-in fade-in zoom-in duration-500">
-						{/* Pake Next Image: width/height harus set atau pake fill */}
-						<div className="relative w-72 h-[480px]">
+					/* 3. Result View (Optimized for no-scroll) */
+					<div className="flex flex-col items-center gap-6 animate-in fade-in zoom-in">
+						<div className="relative w-full max-w-[320px] max-h-[75vh] aspect-[1080/2420]">
 							<Image
 								src={resultUrl}
-								alt="SolCam Photo Strip Result"
+								alt="Result"
 								fill
 								unoptimized
-								className="shadow-2xl rounded-sm border-[12px] border-white ring-1 ring-zinc-800 object-contain"
+								className="object-contain shadow-2xl rounded-sm border-[10px] border-white ring-1 ring-zinc-800"
 							/>
 						</div>
 						<div className="flex gap-4">
 							<a
 								href={resultUrl}
 								download={getDownloadName()}
-								className="flex items-center gap-2 bg-green-600 px-8 py-4 rounded-full font-bold hover:bg-green-500 transition-all"
+								className="flex items-center gap-2 bg-green-600 px-8 py-4 rounded-full font-bold hover:bg-green-500"
 							>
 								<Download size={20} /> SAVE
 							</a>
 							<button
 								onClick={reset}
-								className="flex items-center gap-2 bg-zinc-800 px-8 py-4 rounded-full font-bold hover:bg-zinc-700 transition-all"
+								className="flex items-center gap-2 bg-zinc-800 px-8 py-4 rounded-full font-bold hover:bg-zinc-700"
 							>
-								<RefreshCcw size={20} /> RETAKE
+								<RefreshCcw size={20} /> NEW SESSION
 							</button>
 						</div>
 					</div>
