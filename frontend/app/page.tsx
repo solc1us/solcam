@@ -196,29 +196,35 @@ export default function SolCam() {
 					</div>
 				) : (
 					/* 3. Result View (Optimized for no-scroll) */
-					<div className="flex flex-col items-center gap-6 animate-in fade-in zoom-in">
-						<div className="relative w-full max-w-[320px] max-h-[75vh] aspect-[1080/2420]">
-							<Image
-								src={resultUrl}
-								alt="Result"
-								fill
-								unoptimized
-								className="object-contain shadow-2xl rounded-sm border-[10px] border-white ring-1 ring-zinc-800"
-							/>
+					<div className="flex flex-col items-center justify-center gap-6 animate-in fade-in zoom-in duration-500">
+						{/* Wrapper Putih (Card) */}
+						<div className="bg-white p-3 shadow-[0_20px_50px_rgba(0,0,0,0.5)] rounded-sm flex items-center justify-center">
+							{/* Container Utama dengan Tinggi Konkrit */}
+							<div className="relative h-[60vh] aspect-[1160/2860]">
+								<Image
+									src={resultUrl}
+									alt="SolCam High-Res Result"
+									fill
+									unoptimized
+									className="object-contain"
+									priority
+								/>
+							</div>
 						</div>
-						<div className="flex gap-4">
+						{/* Action Buttons */}
+						<div className="flex gap-4 w-full max-w-[320px]">
 							<a
 								href={resultUrl}
 								download={getDownloadName()}
-								className="flex items-center gap-2 bg-green-600 px-8 py-4 rounded-full font-bold hover:bg-green-500"
+								className="flex-1 flex items-center justify-center gap-2 bg-green-600 hover:bg-green-500 text-white py-4 rounded-2xl font-bold transition-all active:scale-95 shadow-lg"
 							>
 								<Download size={20} /> SAVE
 							</a>
 							<button
 								onClick={reset}
-								className="flex items-center gap-2 bg-zinc-800 px-8 py-4 rounded-full font-bold hover:bg-zinc-700"
+								className="flex-1 flex items-center justify-center gap-2 bg-zinc-800 hover:bg-zinc-700 text-white py-4 rounded-2xl font-bold transition-all active:scale-95 border border-zinc-700 shadow-lg"
 							>
-								<RefreshCcw size={20} /> NEW SESSION
+								<RefreshCcw size={20} /> NEW
 							</button>
 						</div>
 					</div>
